@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 
 const NAV = [
   { href: "#pipeline", label: "Конвейер" },
+  { href: "#ai", label: "AI-режим" },
   { href: "#steps", label: "Установка" },
   { href: "#code", label: "Код" },
   { href: "#config", label: "Конфиг" },

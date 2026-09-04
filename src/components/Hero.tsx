@@ -6,7 +6,7 @@ import { PlaneIcon, PlayIcon } from "../lib/motion";
 const META = [
   "python-telegram-bot",
   "ffmpeg · 9:16",
-  "OAuth 2.0 · youtube.upload",
+  "AI-режим: Groq + Pollinations + edge-tts",
   "whitelist по chat_id",
 ];
 
@@ -49,6 +49,12 @@ export default function Hero() {
               <span className="chip !text-[#ff9d95] !border-[rgba(255,68,56,0.4)]">
                 <PlayIcon size={13} /> автопубликация
               </span>
+              <span className="chip !text-[var(--ok)] !border-[rgba(69,212,131,0.4)]">
+                <svg width="13" height="13" viewBox="0 0 24 24" fill="none">
+                  <path d="M12 2.5 14.2 8.8l6.3 2.2-6.3 2.2L12 19.5l-2.2-6.3-6.3-2.2 6.3-2.2L12 2.5Z" stroke="currentColor" strokeWidth="1.8" strokeLinejoin="round" />
+                </svg>
+                AI-режим · идея → ролик
+              </span>
             </div>
 
             <h1 className="font-disp font-black leading-[1.02] mt-7 text-[38px] sm:text-[54px] xl:text-[62px]" data-reveal style={{ "--rd": "80ms" } as React.CSSProperties}>
@@ -67,8 +73,9 @@ export default function Hero() {
             <p className="mt-7 max-w-[540px] text-[17px] leading-relaxed text-[var(--muted)]" data-reveal style={{ "--rd": "160ms" } as React.CSSProperties}>
               <b className="text-[var(--ink)]">ShortsFlow</b> — бот-конвейер для своих: кидаете ему ролик в личку,
               а он режет его до 60 секунд, кадрирует в вертикаль 9:16 и сам публикует на ваш
-              YouTube-канал. Без ручных загрузок, без браузера, без лишних глаз —
-              отвечает только вашему chat_id.
+              YouTube-канал. А в AI-режиме — собирает ролик из идеи в пару строк:
+              сценарий, кадры, озвучка и превью с кнопкой «Опубликовать».
+              Без браузера, без лишних глаз — отвечает только вашему chat_id.
             </p>
 
             <div className="flex flex-wrap gap-2 mt-6" data-reveal style={{ "--rd": "220ms" } as React.CSSProperties}>
@@ -82,7 +89,7 @@ export default function Hero() {
                 <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M12 3v12m0 0 4.5-4.5M12 15 7.5 10.5M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
                 </svg>
-                Код бота — 1 файл
+                Код бота · 2 модуля
               </a>
               <a href="#steps" className="btn btn-ghost">
                 Установить за 10 минут
@@ -96,8 +103,8 @@ export default function Hero() {
             <div className="grid grid-cols-3 max-w-[440px] gap-px mt-12 rounded-xl overflow-hidden border border-[var(--line-soft)]" data-reveal style={{ "--rd": "340ms" } as React.CSSProperties}>
               {[
                 ["~40 c", "от «отправил» до ссылки"],
-                ["1 файл", "весь бот, ~150 строк"],
-                ["0 ₽", "за софт · VPS от 200 ₽"],
+                ["2 режима", "видео + идея → AI-ролик"],
+                ["0 ₽", "AI-стек · бесплатные tier'ы"],
               ].map(([v, l]) => (
                 <div key={v} className="px-4 py-4" style={{ background: "rgba(18,27,48,0.72)" }}>
                   <p className="font-disp font-bold text-[19px] text-[var(--tg-soft)]">{v}</p>

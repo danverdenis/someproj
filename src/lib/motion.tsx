@@ -154,13 +154,13 @@ export function SectionHead({
 }: {
   index: string;
   kicker: string;
-  tone?: "tg" | "yt" | "amber";
+  tone?: "tg" | "yt" | "amber" | "ok";
   title: React.ReactNode;
   lead?: string;
 }) {
   return (
     <div className="max-w-3xl" data-reveal>
-      <div className={`kicker ${tone === "yt" ? "yt" : tone === "amber" ? "amber" : ""}`}>
+      <div className={`kicker ${tone === "yt" ? "yt" : tone === "amber" ? "amber" : tone === "ok" ? "ok" : ""}`}>
         {index} · {kicker}
       </div>
       <h2 className="font-disp text-[26px] sm:text-[34px] leading-[1.15] font-bold mt-4 text-[var(--ink)]">

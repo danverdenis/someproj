@@ -164,6 +164,8 @@ body {
 .kicker.yt::before { background: linear-gradient(90deg, var(--yt), transparent); }
 .kicker.amber { color: var(--amber); }
 .kicker.amber::before { background: linear-gradient(90deg, var(--amber), transparent); }
+.kicker.ok { color: var(--ok); }
+.kicker.ok::before { background: linear-gradient(90deg, var(--ok), transparent); }
 
 .codebox {
   background: #0b1120;
@@ -259,6 +261,18 @@ body {
   to { opacity: 1; transform: none; }
 }
 .msg-in { animation: msg-in 0.35s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+@keyframes swapin {
+  from { opacity: 0; transform: translateY(10px); }
+  to { opacity: 1; transform: none; }
+}
+.swap-in { animation: swapin 0.45s cubic-bezier(0.2, 0.7, 0.2, 1) both; }
+
+@keyframes eqbar {
+  0%, 100% { transform: scaleY(0.3); }
+  50% { transform: scaleY(1); }
+}
+.eq-bar { transform-origin: bottom; animation: eqbar 0.9s ease-in-out infinite; }
 
 .quota-fill { transition: width 1.6s cubic-bezier(0.2, 0.7, 0.2, 1); }
 

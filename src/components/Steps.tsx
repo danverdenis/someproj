@@ -49,7 +49,7 @@ export default function Steps() {
           {/* левая колонка — липкая навигация по шагам */}
           <div className="lg:sticky lg:top-28 lg:self-start">
             <SectionHead
-              index="02"
+              index="03"
               kicker="установка"
               title={<>Десять минут —<br />и бот <span className="text-[var(--tg-soft)]">в строю</span></>}
               lead="Понадобятся: аккаунт Telegram, аккаунт Google и любая машина с Python 3.10+ — от Raspberry Pi до VPS за двести рублей."
