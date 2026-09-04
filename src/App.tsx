@@ -1,6 +1,7 @@
 import Header from "./components/Header";
 import Hero from "./components/Hero";
 import Pipeline from "./components/Pipeline";
+import AiMode from "./components/AiMode";
 import Steps from "./components/Steps";
 import CodeFiles from "./components/CodeFiles";
 import Configurator from "./components/Configurator";
@@ -22,6 +23,7 @@ export default function App() {
       <main className="relative z-10">
         <Hero />
         <Pipeline />
+        <AiMode />
         <Steps />
         <CodeFiles />
         <Configurator />

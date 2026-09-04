@@ -27,7 +27,7 @@ export default function Safety() {
     <section id="safety" className="relative py-24 scroll-mt-24">
       <div className="max-w-6xl mx-auto px-5 sm:px-8">
         <SectionHead
-          index="05"
+          index="06"
           kicker="приватность и лимиты"
           tone="yt"
           title={<>Свои — проходят, <span className="text-[#ff6b60]">чужие — в лог</span></>}

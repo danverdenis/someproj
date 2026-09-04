@@ -11,7 +11,7 @@ export default function Faq() {
         <div className="grid lg:grid-cols-[0.8fr_1.2fr] gap-12 items-start">
           <div className="lg:sticky lg:top-28">
             <SectionHead
-              index="06"
+              index="07"
               kicker="вопросы"
               title={<>Спрашивают <span className="text-[var(--tg-soft)]">перед запуском</span></>}
               lead="Собрано из реальных граблей: Shorts, которые не стали Shorts, квоты, лимиты Bot API и смена аккаунта."

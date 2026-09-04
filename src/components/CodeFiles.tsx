@@ -12,15 +12,15 @@ export default function CodeFiles() {
       <div className="max-w-6xl mx-auto px-5 sm:px-8">
         <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-8">
           <SectionHead
-            index="03"
+            index="04"
             kicker="исходники"
-            title={<>Весь бот — <span className="text-[var(--tg-soft)]">один main.py</span></>}
-            lead="Скопируйте файлы, заполните .env, запустите. Никаких баз данных, очередей и контейнеров — при желании поместится в cron и папку на домашнем компьютере."
+            title={<>Два модуля — и бот <span className="text-[var(--tg-soft)]">в сборе</span></>}
+            lead="main.py отвечает за Telegram и YouTube, ai_pipeline.py — за сценарии и сборку AI-роликов. Скопируйте файлы, заполните .env, запустите. Без баз данных, очередей и контейнеров."
           />
           <div className="flex flex-wrap gap-3 shrink-0" data-reveal>
             <span className="chip">Python 3.10+</span>
             <span className="chip">ffmpeg</span>
-            <span className="chip">3 зависимости</span>
+            <span className="chip">5 зависимостей</span>
           </div>
         </div>
 
