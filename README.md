@@ -404,6 +404,7 @@ shortsflow/
 - **Озвучка**: edge-tts (Microsoft) — бесплатно, 300+ голосов
 - **Сборка**: ffmpeg — Ken Burns эффект + наложение аудио
 - **Распознавание лиц**: OpenCV (Haar Cascades) — извлечение лица из фото для генерации персонажа
+- **Версии**: OpenCV 4.8.1.78 (стабильная версия с полной поддержкой Haar Cascades)
 
 Если появится ключ Runway/Kling/Veo — подмените функцию `build_video()` в `ai_pipeline.py`. Остальной бот не изменится.
 
@@ -468,6 +469,13 @@ docker-compose up -d
 
 **Можно ли использовать Docker на Raspberry Pi?**
 Да, образ собирается для ARM-архитектуры. Возможно, потребуется заменить базовый образ в `Dockerfile` на `python:3.11-slim-bullseye` для лучшей совместимости.
+
+**Ошибка: `module 'cv2' has no attribute 'CascadeClassifier'`**
+Это значит, что OpenCV установился некорректно. Решения:
+1. Пересоберите образ с кешем: `docker-compose build --no-cache`
+2. Проверьте, что используется `opencv-contrib-python-headless==4.8.1.78` (не обычный `opencv-python`)
+3. Для локальной установки: `pip install opencv-contrib-python-headless==4.8.1.78 --force-reinstall`
+4. Проверьте установку: `python -c "import cv2; print(cv2.__version__)"`
 
 ## Лицензия
 

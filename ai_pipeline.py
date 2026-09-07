@@ -30,8 +30,23 @@ import numpy as np
 log = logging.getLogger("shortsflow.ai")
 
 # ── Работа с лицами ────────────────────────────────────────────
-# Загружаем каскад Хаара для обнаружения лиц (встроен в OpenCV)
-_face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+# Ленивая инициализация каскада Хаара (избегаем ошибок импорта)
+_face_cascade = None
+
+def _get_face_cascade():
+    """Получает каскад Хаара для обнаружения лиц (ленивая инициализация)."""
+    global _face_cascade
+    if _face_cascade is None:
+        try:
+            cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
+            _face_cascade = cv2.CascadeClassifier(cascade_path)
+            if _face_cascade.empty():
+                raise RuntimeError("Не удалось загрузить каскад Хаара")
+            log.info("Каскад Хаара загружен успешно")
+        except Exception as e:
+            log.error("Ошибка загрузки каскада Хаара: %s", e)
+            raise RuntimeError(f"OpenCV не установлен корректно. Попробуйте: pip install opencv-contrib-python-headless==4.8.1.78")
+    return _face_cascade
 
 def extract_face(image_path: str, output_path: str) -> bool:
     """Извлекает лицо из фото и сохраняет кроп.
@@ -48,7 +63,8 @@ def extract_face(image_path: str, output_path: str) -> bool:
     gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     
     # Детектируем лица с помощью каскада Хаара
-    faces = _face_cascade.detectMultiScale(
+    face_cascade = _get_face_cascade()
+    faces = face_cascade.detectMultiScale(
         gray,
         scaleFactor=1.1,
         minNeighbors=5,
