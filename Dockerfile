@@ -6,14 +6,11 @@ LABEL maintainer="ShortsFlow Bot"
 LABEL description="Telegram-бот для автопубликации YouTube Shorts"
 LABEL version="1.0"
 
-# Устанавливаем ffmpeg и системные зависимости для OpenCV/MediaPipe
+# Устанавливаем ffmpeg и системные зависимости для OpenCV
 RUN apt-get update && apt-get install -y --no-install-recommends \
     ffmpeg \
     libgl1 \
     libglib2.0-0 \
-    libsm6 \
-    libxext6 \
-    libxrender-dev \
     libgomp1 \
     && rm -rf /var/lib/apt/lists/*
 
