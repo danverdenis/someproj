@@ -2,3 +2,5 @@ python-telegram-bot==21.6
 google-api-python-client==2.154.0
 google-auth-oauthlib==1.2.1
 edge-tts>=6.1.0
+mediapipe>=0.10.0
+opencv-python>=4.8.0
