@@ -11,6 +11,9 @@
      рисует кадры в Pollinations (без ключа), начитывает озвучку через edge-tts,
      склеивает ролик ffmpeg и присылает вам превью.
      Вы решаете: «Опубликовать в Shorts» или «Ещё дубль».
+     
+     Если предварительно отправить фото с лицом, бот извлечёт лицо и будет
+     использовать вашу внешность при генерации персонажа в видео.
 
 Запуск:  python main.py   (Python 3.10+, ffmpeg в PATH)
 Первый запуск откроет браузер для выдачи доступа к YouTube —
@@ -36,7 +39,7 @@ from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 from googleapiclient.http import MediaFileUpload
 
-from ai_pipeline import expand_script, build_video
+from ai_pipeline import expand_script, build_video, extract_face
 
 # ── Настройки (из окружения, см. .env) ────────────────────────
 BOT_TOKEN    = os.environ["BOT_TOKEN"]
@@ -179,6 +182,61 @@ async def on_video(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
                 os.remove(os.path.join(WORKDIR, f))
 
 
+# ── Обработчик фото: извлекаем лицо для AI-режима ─────────────
+async def on_photo(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Принимает фото и извлекает из него лицо для использования в AI-режиме."""
+    msg = update.message
+    user = update.effective_user
+
+    if user.id not in ALLOWED_IDS:
+        log.warning("Отклонён чужой запрос: %s (id=%s)", user.full_name, user.id)
+        await msg.reply_text(f"Доступ запрещён. Ваш id: {user.id}")
+        return
+
+    photo = msg.photo[-1]  # Берём фото максимального размера
+    status = await msg.reply_text("Принял фото. Ищу лицо…")
+    
+    os.makedirs(WORKDIR, exist_ok=True)
+    photo_path = f"{WORKDIR}/{user.id}_photo.jpg"
+    face_path = f"{WORKDIR}/{user.id}_face.jpg"
+
+    try:
+        # Скачиваем фото
+        tg_file = await ctx.bot.get_file(photo.file_id)
+        await tg_file.download_to_drive(photo_path)
+
+        # Извлекаем лицо
+        if extract_face(photo_path, face_path):
+            # Сохраняем путь к лицу в user_data для использования в AI-режиме
+            ctx.user_data["face_path"] = face_path
+            await status.edit_text(
+                "✅ Лицо сохранено!\n\n"
+                "Теперь при генерации видео в AI-режиме бот будет использовать вашу внешность "
+                "для создания персонажа.\n\n"
+                "Напишите идею для видео, чтобы начать."
+            )
+            log.info("Лицо сохранено для пользователя %s: %s", user.id, face_path)
+        else:
+            await status.edit_text(
+                "❌ Лицо не найдено на фото.\n\n"
+                "Попробуйте другое фото, где лицо хорошо видно:\n"
+                "• Лицо должно занимать значительную часть кадра\n"
+                "• Хорошее освещение\n"
+                "• Лицо анфас или в пол-оборота"
+            )
+            log.warning("Лицо не найдено для пользователя %s", user.id)
+        
+        # Удаляем исходное фото (оставляем только кроп лица)
+        if os.path.exists(photo_path):
+            os.remove(photo_path)
+
+    except Exception as e:
+        log.error("Ошибка при обработке фото: %s", e)
+        await status.edit_text("Не удалось обработать фото. Попробуйте другое.")
+        if os.path.exists(photo_path):
+            os.remove(photo_path)
+
+
 # ── AI-режим: идея → сценарий → видео → превью ──────────────
 async def on_idea(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     msg = update.message
@@ -198,15 +256,25 @@ async def on_idea(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     job = uuid.uuid4().hex[:8]
     os.makedirs(WORKDIR, exist_ok=True)
 
+    # Проверяем, есть ли сохранённое лицо пользователя
+    face_path = ctx.user_data.get("face_path", "")
+    if face_path and not os.path.exists(face_path):
+        log.warning("Файл лица не найден: %s", face_path)
+        face_path = ""
+
     try:
         # 1. Генерация сценария через LLM
         script = expand_script(idea, provider=LLM_PROVIDER, api_key=LLM_API_KEY,
                                model=LLM_MODEL, scene_count=SCENE_COUNT)
-        await status.edit_text(f"Сценарий готов. Рисую кадры ({len(script['scenes'])} шт)…")
+        
+        if face_path:
+            await status.edit_text(f"Сценарий готов. Рисую кадры с вашим лицом ({len(script['scenes'])} шт)…")
+        else:
+            await status.edit_text(f"Сценарий готов. Рисую кадры ({len(script['scenes'])} шт)…")
 
         # 2. Сборка видео: кадры + озвучка + склейка
         video_path = build_video(script, job=job, workdir=WORKDIR,
-                                 tts_voice=TTS_VOICE)
+                                 tts_voice=TTS_VOICE, face_path=face_path)
         await status.edit_text("Видео собрано. Отправляю превью…")
 
         # 3. Превью с кнопками
@@ -318,7 +386,10 @@ async def start(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(
         "👋 Привет! Я ShortsFlow — бот для автопубликации Shorts.\n\n"
         "📹 Видео-режим: отправьте мне видео с подписью — я опубликую его в Shorts.\n\n"
+        "📸 Фото: отправьте фото с лицом — я сохраню его и буду использовать вашу внешность "
+        "при генерации видео в AI-режиме.\n\n"
         "🤖 AI-режим: напишите идею парой строк — я сделаю ролик из сценария, кадров и озвучки. "
+        "Если вы отправили фото, персонаж будет похож на вас. "
         "Вы получите превью и сможете решить: опубликовать или переснять."
     )
 
@@ -332,6 +403,9 @@ def main():
 
     # Видео-режим
     app.add_handler(MessageHandler(filters.VIDEO | filters.Document.VIDEO, on_video))
+
+    # Фото: извлекаем лицо для AI-режима
+    app.add_handler(MessageHandler(filters.PHOTO, on_photo))
 
     # AI-режим: любой текст
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, on_idea))

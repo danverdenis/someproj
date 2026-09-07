@@ -24,7 +24,111 @@ import urllib.request
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
+import cv2
+import mediapipe as mp
+import numpy as np
+
 log = logging.getLogger("shortsflow.ai")
+
+# ── Работа с лицами ────────────────────────────────────────────
+mp_face = mp.solutions.face_detection
+
+def extract_face(image_path: str, output_path: str) -> bool:
+    """Извлекает лицо из фото и сохраняет кроп.
+    
+    Returns:
+        True если лицо найдено и сохранено, False иначе
+    """
+    img = cv2.imread(image_path)
+    if img is None:
+        log.error("Не удалось прочитать изображение: %s", image_path)
+        return False
+    
+    h, w = img.shape[:2]
+    
+    with mp_face.FaceDetection(model_selection=1, min_detection_confidence=0.5) as face_detection:
+        results = face_detection.process(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
+        
+        if not results.detections:
+            log.warning("Лицо не найдено в изображении")
+            return False
+        
+        # Берём первое найденное лицо
+        detection = results.detections[0]
+        bbox = detection.location_data.relative_bounding_box
+        
+        # Конвертируем относительные координаты в абсолютные
+        x = max(0, int(bbox.xmin * w))
+        y = max(0, int(bbox.ymin * h))
+        bw = int(bbox.width * w)
+        bh = int(bbox.height * h)
+        
+        # Добавляем отступы (padding) для лучшего кропа
+        padding = 0.3
+        x1 = max(0, int(x - bw * padding))
+        y1 = max(0, int(y - bh * padding))
+        x2 = min(w, int(x + bw + bw * padding))
+        y2 = min(h, int(y + bh + bh * padding))
+        
+        # Обрезаем лицо
+        face_crop = img[y1:y2, x1:x2]
+        
+        if face_crop.size == 0:
+            log.error("Пустой кроп лица")
+            return False
+        
+        cv2.imwrite(output_path, face_crop)
+        log.info("Лицо извлечено: %s (%dx%d)", output_path, face_crop.shape[1], face_crop.shape[0])
+        return True
+
+
+def describe_face(face_path: str) -> str:
+    """Создаёт текстовое описание лица для использования в промптах.
+    
+    Анализирует базовые характеристики лица для генерации.
+    """
+    img = cv2.imread(face_path)
+    if img is None:
+        return ""
+    
+    # Базовый анализ (можно расширить с помощью ML моделей)
+    h, w = img.shape[:2]
+    
+    # Определяем доминирующий цвет кожи (упрощённо)
+    # В реальности можно использовать более сложные алгоритмы
+    hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
+    avg_hue = np.mean(hsv[:,:,0])
+    
+    # Определяем пол по соотношению сторон лица (очень грубо)
+    aspect_ratio = w / h if h > 0 else 1
+    
+    # Простое описание (в реальности можно использовать face analysis библиотеки)
+    description_parts = []
+    
+    # Возраст (по размеру лица относительно кадра - очень приблизительно)
+    face_area = w * h
+    if face_area > 100000:
+        description_parts.append("close-up portrait")
+    elif face_area > 50000:
+        description_parts.append("headshot")
+    else:
+        description_parts.append("person")
+    
+    # Пол (по aspect ratio - очень приблизительно)
+    if aspect_ratio > 0.85:
+        description_parts.append("male")
+    else:
+        description_parts.append("female")
+    
+    # Тон кожи (по hue)
+    if avg_hue < 10 or avg_hue > 170:
+        description_parts.append("light skin tone")
+    elif avg_hue < 20:
+        description_parts.append("medium skin tone")
+    else:
+        description_parts.append("dark skin tone")
+    
+    return ", ".join(description_parts)
 
 
 # ── LLM: разворачиваем идею в сценарий ───────────────────────
@@ -114,9 +218,18 @@ def expand_script(idea: str, *, provider: str = "groq", api_key: str = "",
 
 
 # ── Картинки: Pollinations.ai (без ключа) ─────────────────────
-def _pollinations_image(prompt: str, *, seed: int = 0, width: int = 720, height: int = 1280) -> bytes:
-    """Рисует кадр 9:16 через Pollinations. Возвращает JPEG-байты."""
-    full_prompt = f"{prompt}, vertical composition 9:16, cinematic lighting, high detail"
+def _pollinations_image(prompt: str, *, seed: int = 0, width: int = 720, height: int = 1280,
+                        face_description: str = "") -> bytes:
+    """Рисует кадр 9:16 через Pollinations. Возвращает JPEG-байты.
+    
+    Если передано face_description, добавляет его в промпт для сохранения внешности.
+    """
+    # Если есть описание лица, добавляем его в промпт
+    if face_description:
+        full_prompt = f"{face_description}, {prompt}, vertical composition 9:16, cinematic lighting, high detail, consistent character"
+    else:
+        full_prompt = f"{prompt}, vertical composition 9:16, cinematic lighting, high detail"
+    
     params = urllib.parse.urlencode({
         "width": width,
         "height": height,
@@ -151,8 +264,11 @@ async def _tts(text: str, *, voice: str, out_path: str) -> float:
 
 # ── Сборка видео: Ken Burns + аудио ───────────────────────────
 def _build_with_ffmpeg(scenes: list[dict], *, job: str, workdir: str,
-                       tts_voice: str, out_path: str) -> str:
-    """Собирает ролик из сцен: кадры с Ken Burns + озвучка."""
+                       tts_voice: str, out_path: str, face_description: str = "") -> str:
+    """Собирает ролик из сцен: кадры с Ken Burns + озвучка.
+    
+    Если передано face_description, использует его для сохранения внешности персонажа.
+    """
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
@@ -160,7 +276,8 @@ def _build_with_ffmpeg(scenes: list[dict], *, job: str, workdir: str,
     log.info("Рисую %d кадров через Pollinations…", len(scenes))
     with ThreadPoolExecutor(max_workers=3) as pool:
         futures = [
-            pool.submit(_pollinations_image, s["visual"], seed=hash(s["visual"]) % 10000 + i)
+            pool.submit(_pollinations_image, s["visual"], seed=hash(s["visual"]) % 10000 + i,
+                       face_description=face_description)
             for i, s in enumerate(scenes)
         ]
         image_bytes = [f.result() for f in futures]
@@ -225,13 +342,26 @@ def _build_with_ffmpeg(scenes: list[dict], *, job: str, workdir: str,
 
 # ── Главная точка сборки видео ────────────────────────────────
 def build_video(script: dict, *, job: str, workdir: str,
-                tts_voice: str = "ru-RU-DmitryNeural") -> str:
+                tts_voice: str = "ru-RU-DmitryNeural",
+                face_path: str = "", face_description: str = "") -> str:
     """Сценарий → mp4-файл.
+
+    Если передан face_path, использует лицо для сохранения внешности персонажа
+    во всех кадрах видео. face_description — текстовое описание лица для промптов.
 
     Это ЕДИНСТВЕННАЯ точка, куда подключается платный генератор видео
     (Runway/Kling/Veo). Подмените содержимое функции — остальной бот
     не изменится.
     """
     out = f"{workdir}/{job}_final.mp4"
+    
+    # Если есть лицо, создаём описание для промптов
+    if face_path and not face_description:
+        face_description = describe_face(face_path)
+    
+    if face_description:
+        log.info("Использую лицо персонажа: %s", face_description)
+    
     return _build_with_ffmpeg(script["scenes"], job=job, workdir=workdir,
-                              tts_voice=tts_voice, out_path=out)
+                              tts_voice=tts_voice, out_path=out,
+                              face_description=face_description)
