@@ -1,5 +1,5 @@
-# Базовый образ Python 3.11 (slim — лёгкий)
-FROM python:3.11-slim
+# Базовый образ Python 3.11 на Ubuntu (более совместим с OpenCV/MediaPipe)
+FROM python:3.11-slim-bookworm
 
 # Метаданные
 LABEL maintainer="ShortsFlow Bot"
@@ -15,6 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     libxrender-dev \
     libgomp1 \
+    && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
 # Создаём рабочую директорию
@@ -24,7 +25,8 @@ WORKDIR /app
 COPY requirements.txt .
 
 # Устанавливаем Python-зависимости
-RUN pip install --no-cache-dir -r requirements.txt
+RUN pip install --no-cache-dir --upgrade pip && \
+    pip install --no-cache-dir -r requirements.txt
 
 # Копируем код приложения
 COPY main.py ai_pipeline.py ./
