@@ -23,6 +23,9 @@ COPY requirements.txt .
 # Устанавливаем Python-зависимости
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Проверяем, что OpenCV установился корректно
+RUN python -c "import cv2; print(f'OpenCV {cv2.__version__} установлен успешно')"
+
 # Копируем код приложения
 COPY main.py ai_pipeline.py ./
 
