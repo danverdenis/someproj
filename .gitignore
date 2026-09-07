@@ -1,3 +1,22 @@
+# Секреты
+.env
+token.json
+credentials.json
+
+# Временные файлы
+tmp/
+__pycache__/
+*.pyc
+*.pyo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+
+# OS
+.DS_Store
+Thumbs.db
 node_modules/
 .next/
 dist/
