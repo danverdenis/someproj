@@ -25,13 +25,13 @@ import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
 import cv2
-import mediapipe as mp
 import numpy as np
 
 log = logging.getLogger("shortsflow.ai")
 
 # ── Работа с лицами ────────────────────────────────────────────
-mp_face = mp.solutions.face_detection
+# Загружаем каскад Хаара для обнаружения лиц (встроен в OpenCV)
+_face_cascade = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
 
 def extract_face(image_path: str, output_path: str) -> bool:
     """Извлекает лицо из фото и сохраняет кроп.
@@ -44,42 +44,41 @@ def extract_face(image_path: str, output_path: str) -> bool:
         log.error("Не удалось прочитать изображение: %s", image_path)
         return False
     
-    h, w = img.shape[:2]
+    # Конвертируем в grayscale для детекции
+    gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
     
-    with mp_face.FaceDetection(model_selection=1, min_detection_confidence=0.5) as face_detection:
-        results = face_detection.process(cv2.cvtColor(img, cv2.COLOR_BGR2RGB))
-        
-        if not results.detections:
-            log.warning("Лицо не найдено в изображении")
-            return False
-        
-        # Берём первое найденное лицо
-        detection = results.detections[0]
-        bbox = detection.location_data.relative_bounding_box
-        
-        # Конвертируем относительные координаты в абсолютные
-        x = max(0, int(bbox.xmin * w))
-        y = max(0, int(bbox.ymin * h))
-        bw = int(bbox.width * w)
-        bh = int(bbox.height * h)
-        
-        # Добавляем отступы (padding) для лучшего кропа
-        padding = 0.3
-        x1 = max(0, int(x - bw * padding))
-        y1 = max(0, int(y - bh * padding))
-        x2 = min(w, int(x + bw + bw * padding))
-        y2 = min(h, int(y + bh + bh * padding))
-        
-        # Обрезаем лицо
-        face_crop = img[y1:y2, x1:x2]
-        
-        if face_crop.size == 0:
-            log.error("Пустой кроп лица")
-            return False
-        
-        cv2.imwrite(output_path, face_crop)
-        log.info("Лицо извлечено: %s (%dx%d)", output_path, face_crop.shape[1], face_crop.shape[0])
-        return True
+    # Детектируем лица с помощью каскада Хаара
+    faces = _face_cascade.detectMultiScale(
+        gray,
+        scaleFactor=1.1,
+        minNeighbors=5,
+        minSize=(30, 30)
+    )
+    
+    if len(faces) == 0:
+        log.warning("Лицо не найдено в изображении")
+        return False
+    
+    # Берём самое большое лицо (обычно это основное)
+    x, y, w, h = max(faces, key=lambda f: f[2] * f[3])
+    
+    # Добавляем отступы (padding) для лучшего кропа
+    padding = 0.3
+    x1 = max(0, int(x - w * padding))
+    y1 = max(0, int(y - h * padding))
+    x2 = min(img.shape[1], int(x + w + w * padding))
+    y2 = min(img.shape[0], int(y + h + h * padding))
+    
+    # Обрезаем лицо
+    face_crop = img[y1:y2, x1:x2]
+    
+    if face_crop.size == 0:
+        log.error("Пустой кроп лица")
+        return False
+    
+    cv2.imwrite(output_path, face_crop)
+    log.info("Лицо извлечено: %s (%dx%d)", output_path, face_crop.shape[1], face_crop.shape[0])
+    return True
 
 
 def describe_face(face_path: str) -> str:
@@ -95,7 +94,6 @@ def describe_face(face_path: str) -> str:
     h, w = img.shape[:2]
     
     # Определяем доминирующий цвет кожи (упрощённо)
-    # В реальности можно использовать более сложные алгоритмы
     hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
     avg_hue = np.mean(hsv[:,:,0])
     
