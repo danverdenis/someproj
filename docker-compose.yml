@@ -1,0 +1,33 @@
+version: '3.8'
+
+services:
+  shortsflow:
+    build: .
+    container_name: shortsflow
+    restart: unless-stopped
+    
+    # Монтируем конфигурационные файлы и временные файлы
+    volumes:
+      - ./.env:/app/.env:ro
+      - ./credentials.json:/app/credentials.json:ro
+      - ./token.json:/app/token.json
+      - ./tmp:/app/tmp
+    
+    # Переменные окружения из .env файла
+    env_file:
+      - .env
+    
+    # Логи в реальном времени
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+    
+    # Ограничения ресурсов (опционально)
+    deploy:
+      resources:
+        limits:
+          memory: 1G
+        reservations:
+          memory: 512M
