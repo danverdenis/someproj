@@ -1,0 +1,41 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info
+dist
+build
+
+# Временные файлы
+tmp/
+*.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Документация (не нужна в образе)
+README.md
+LICENSE
+
+# Docker файлы (не включаем сами себя)
+Dockerfile
+docker-compose.yml
+.dockerignore
+
+# Примеры конфигурации (используем реальные файлы через volumes)
+.env.example

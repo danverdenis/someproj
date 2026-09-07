@@ -28,6 +28,14 @@
 
 ## Установка
 
+Выберите один из способов:
+
+### Способ 1: Docker (рекомендуется)
+
+Самый простой способ — запустить бота в контейнере. См. раздел [Запуск в Docker](#запуск-в-docker) ниже.
+
+### Способ 2: Локальная установка
+
 ### 1. Клонируйте репозиторий
 
 ```bash
@@ -229,6 +237,106 @@ python main.py
 - Лицо анфас или в пол-оборота
 - Можно отправить несколько фото — бот сохранит последнее
 
+## Запуск в Docker
+
+### Быстрый старт
+
+1. Убедитесь, что у вас установлены Docker и Docker Compose
+2. Создайте `.env` и `credentials.json` (см. инструкции выше)
+3. Запустите контейнер:
+
+```bash
+docker-compose up -d
+```
+
+### Сборка образа вручную
+
+```bash
+# Собрать образ
+docker build -t shortsflow .
+
+# Запустить контейнер
+docker run -d \
+  --name shortsflow \
+  --restart unless-stopped \
+  --env-file .env \
+  -v $(pwd)/credentials.json:/app/credentials.json:ro \
+  -v $(pwd)/token.json:/app/token.json \
+  -v $(pwd)/tmp:/app/tmp \
+  shortsflow
+```
+
+### Просмотр логов
+
+```bash
+# Логи контейнера
+docker logs -f shortsflow
+
+# Или через docker-compose
+docker-compose logs -f
+```
+
+### Остановка и удаление
+
+```bash
+# Остановить
+docker-compose down
+
+# Или вручную
+docker stop shortsflow
+docker rm shortsflow
+```
+
+### Обновление бота
+
+```bash
+# Пересобрать образ с новой версией кода
+docker-compose build
+
+# Перезапустить контейнер
+docker-compose up -d
+```
+
+### Структура томов
+
+| Путь в контейнере | Путь на хосте | Назначение |
+|-------------------|---------------|------------|
+| `/app/.env` | `./.env` | Конфигурация (read-only) |
+| `/app/credentials.json` | `./credentials.json` | OAuth-ключ Google (read-only) |
+| `/app/token.json` | `./token.json` | Токен YouTube (создаётся автоматически) |
+| `/app/tmp` | `./tmp` | Временные файлы |
+
+### Первый запуск с OAuth
+
+При первом запуске нужно пройти авторизацию Google:
+
+```bash
+# Запустите контейнер в интерактивном режиме
+docker run -it --rm \
+  --env-file .env \
+  -v $(pwd)/credentials.json:/app/credentials.json:ro \
+  -v $(pwd)/token.json:/app/token.json \
+  -p 8080:8080 \
+  shortsflow
+```
+
+Откройте `http://localhost:8080` в браузере для авторизации. После этого `token.json` будет создан, и можно запускать бота в фоне через `docker-compose up -d`.
+
+### Альтернатива: авторизация без Docker
+
+Если контейнер без браузера, пройдите авторизацию локально:
+
+```bash
+# Локально
+pip install -r requirements.txt
+export $(grep -v '^#' .env | xargs)
+python main.py
+# Пройдите авторизацию в браузере
+
+# Скопируйте token.json и используйте с Docker
+docker-compose up -d
+```
+
 ## Автозапуск (systemd)
 
 Создайте файл `/etc/systemd/system/shortsflow.service`:
@@ -270,6 +378,9 @@ shortsflow/
 ├── main.py              # основной файл бота
 ├── ai_pipeline.py       # AI-режим: LLM + картинки + озвучка + ffmpeg + распознавание лиц
 ├── requirements.txt     # Python-зависимости
+├── Dockerfile           # образ для контейнера
+├── docker-compose.yml   # оркестрация контейнера
+├── .dockerignore        # исключения для Docker-образа
 ├── .env.example         # пример конфигурации
 ├── .env                 # ваши настройки (не коммитить!)
 ├── credentials.json     # OAuth-ключ Google (не коммитить!)
@@ -338,6 +449,25 @@ MediaPipe требует, чтобы лицо было хорошо видно. 
 - Лицо анфас или в пол-оборота
 - Лицо занимает значительную часть кадра
 - Без солнцезащитных очков или масок
+
+**Как запустить бота в Docker?**
+См. раздел "Запуск в Docker" выше. Кратко: `docker-compose up -d` после настройки `.env` и `credentials.json`.
+
+**Контейнер не запускается. Что делать?**
+Проверьте логи: `docker logs shortsflow`. Частые проблемы:
+- Не найден `.env` — проверьте путь к файлу
+- Не найден `credentials.json` — скачайте OAuth-ключ из Google Cloud Console
+- Ошибка ffmpeg — убедитесь, что образ собран с `Dockerfile` (там установлен ffmpeg)
+
+**Как обновить бота в Docker?**
+```bash
+git pull  # или скопируйте новые файлы
+docker-compose build
+docker-compose up -d
+```
+
+**Можно ли использовать Docker на Raspberry Pi?**
+Да, образ собирается для ARM-архитектуры. Возможно, потребуется заменить базовый образ в `Dockerfile` на `python:3.11-slim-bullseye` для лучшей совместимости.
 
 ## Лицензия
 
