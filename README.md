@@ -1,2 +1,297 @@
-# someproj
-Telegram Video to YouTube Shorts
+# ShortsFlow
+
+Приватный Telegram-бот для автопубликации YouTube Shorts.
+
+Два режима работы:
+- **Видео-режим**: отправляете видео боту → бот режет до 60 секунд, кадрирует в 9:16, публикует на ваш YouTube-канал
+- **AI-режим**: пишете идею парой строк → бот разворачивает в сценарий через LLM, рисует кадры, начитывает озвучку, склеивает ролик → вы получаете превью с кнопками «Опубликовать» и «Ещё дубль»
+
+## Возможности
+
+- Приватность: отвечает только вашему `chat_id` (whitelist)
+- Автоматическая обрезка до 60 секунд и кадрирование в вертикаль 9:16
+- OAuth 2.0 для YouTube с автообновлением токена
+- AI-режим: бесплатная LLM (Groq/Gemini/OpenRouter) + бесплатные картинки (Pollinations) + бесплатная озвучка (edge-tts)
+- Превью перед публикацией — вы решаете, что уходит на канал
+- Resumable-загрузка (обрыв сети не убивает публикацию)
+- Автозапуск через systemd
+
+## Требования
+
+- Python 3.10+
+- ffmpeg (в PATH)
+- Telegram-аккаунт
+- Google-аккаунт с доступом к YouTube
+
+## Установка
+
+### 1. Клонируйте репозиторий
+
+```bash
+git clone <your-repo-url>
+cd shortsflow
+```
+
+### 2. Установите зависимости
+
+```bash
+pip install -r requirements.txt
+```
+
+### 3. Установите ffmpeg
+
+**Ubuntu/Debian:**
+```bash
+sudo apt update
+sudo apt install -y ffmpeg
+```
+
+**macOS:**
+```bash
+brew install ffmpeg
+```
+
+**Windows:**
+Скачайте с https://ffmpeg.org/download.html и добавьте в PATH.
+
+### 4. Создайте бота в Telegram
+
+1. Откройте [@BotFather](https://t.me/BotFather)
+2. Отправьте `/newbot`
+3. Придумайте имя и логин (должен заканчиваться на `bot`)
+4. Сохраните токен (показывается один раз)
+
+### 5. Узнайте свой chat_id
+
+1. Откройте [@userinfobot](https://t.me/userinfobot)
+2. Отправьте любое сообщение
+3. Скопируйте ваш `Id` (например, `123456789`)
+
+### 6. Включите YouTube Data API v3
+
+1. Откройте [Google Cloud Console](https://console.cloud.google.com/)
+2. Создайте проект (например, `shortsflow`)
+3. Перейдите в **APIs & Services → Library**
+4. Найдите **YouTube Data API v3** и нажмите **Enable**
+5. Перейдите в **APIs & Services → OAuth consent screen**
+   - Тип: **External**
+   - Заполните обязательные поля (название, email)
+   - В разделе **Test users** добавьте свой Google-аккаунт
+6. Перейдите в **APIs & Services → Credentials**
+7. Нажмите **Create Credentials → OAuth client ID**
+   - Тип: **Desktop app**
+   - Нажмите **Create**
+8. Скачайте JSON и сохраните как `credentials.json` в папке проекта
+
+### 7. Получите бесплатный ключ Groq (для AI-режима)
+
+1. Откройте [Groq Console](https://console.groq.com/)
+2. Зарегистрируйтесь (бесплатно)
+3. Перейдите в **API Keys**
+4. Создайте новый ключ
+5. Скопируйте ключ (начинается с `gsk_...`)
+
+**Альтернативы:**
+- **Gemini**: получите ключ на [Google AI Studio](https://aistudio.google.com/app/apikey)
+- **OpenRouter**: зарегистрируйтесь на [OpenRouter](https://openrouter.ai/) (есть бесплатные модели)
+
+### 8. Настройте .env
+
+```bash
+cp .env.example .env
+nano .env  # или любой редактор
+```
+
+Заполните переменные:
+
+```env
+# Telegram
+BOT_TOKEN=123456789:AAE-xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+ALLOWED_IDS=123456789
+
+# YouTube
+PRIVACY=unlisted
+DEFAULT_TAGS=shorts,автопостинг
+MAX_SECONDS=58
+
+# AI-режим
+LLM_PROVIDER=groq
+LLM_API_KEY=gsk_xxxxxxxxxxxxxx
+LLM_MODEL=llama-3.3-70b-versatile
+TTS_VOICE=ru-RU-DmitryNeural
+SCENE_COUNT=5
+```
+
+**Переменные:**
+- `BOT_TOKEN` — токен от BotFather
+- `ALLOWED_IDS` — ваш chat_id (несколько через запятую)
+- `PRIVACY` — статус роликов: `private` (только вы), `unlisted` (по ссылке), `public` (все)
+- `DEFAULT_TAGS` — теги для каждого ролика
+- `MAX_SECONDS` — максимальная длительность (бот обрежет всё длиннее)
+- `LLM_PROVIDER` — провайдер LLM: `groq`, `gemini`, `openrouter`
+- `LLM_API_KEY` — ключ API от провайдера
+- `LLM_MODEL` — модель (по умолчанию `llama-3.3-70b-versatile` для Groq)
+- `TTS_VOICE` — голос озвучки (список голосов: `edge-tts --list-voices`)
+- `SCENE_COUNT` — количество сцен в AI-ролике
+
+### 9. Первый запуск
+
+```bash
+python main.py
+```
+
+При первом запуске откроется браузер с экраном входа Google:
+1. Войдите в Google-аккаунт
+2. Разрешите доступ к загрузке видео на YouTube
+3. Токен сохранится в `token.json` и больше авторизация не нужна
+
+Если машина без браузера (VPS):
+1. Запустите `python main.py` локально
+2. Пройдите авторизацию в браузере
+3. Скопируйте `token.json` на сервер
+
+## Использование
+
+### Видео-режим
+
+1. Откройте вашего бота в Telegram
+2. Отправьте видео с подписью (подпись станет заголовком)
+3. Бот скачает, обработает и опубликует ролик
+4. Получите ссылку: `youtube.com/shorts/...`
+
+**Пример:**
+```
+вы  → матч_моменты.mp4 «гол на 90+4»
+бот → Принял видео. Скачиваю файл…
+бот → Кадрирую в вертикаль 9:16…
+бот → Загружаю на YouTube…
+бот → Готово! Shorts опубликован (unlisted):
+      https://www.youtube.com/shorts/Xt9Kq2m
+```
+
+### AI-режим
+
+1. Откройте вашего бота в Telegram
+2. Напишите идею парой строк
+3. Бот разворачивает идею в сценарий, рисует кадры, начитывает озвучку
+4. Получите превью с кнопками:
+   - **✅ Опубликовать в Shorts** — загрузит ролик на YouTube
+   - **🔄 Ещё дубль** — переснимет с новым ракурсом
+
+**Пример:**
+```
+вы  → кот пытается поймать лазерную указку, но промахивается
+бот → Разворачиваю идею в сценарий…
+бот → Сценарий готов. Рисую кадры (5 шт)…
+бот → Видео собрано. Отправляю превью…
+бот → [видео-превью]
+      🎬 Превью готово!
+      
+      Заголовок: Кот vs лазер: эпичный провал #Shorts
+      
+      Что делаем?
+      [✅ Опубликовать в Shorts] [🔄 Ещё дубль]
+```
+
+## Автозапуск (systemd)
+
+Создайте файл `/etc/systemd/system/shortsflow.service`:
+
+```ini
+[Unit]
+Description=ShortsFlow — Telegram → YouTube Shorts
+After=network-online.target
+
+[Service]
+WorkingDirectory=/opt/shortsflow
+EnvironmentFile=/opt/shortsflow/.env
+ExecStart=/usr/bin/python3 main.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
+```
+
+Активируйте:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now shortsflow
+```
+
+Проверка статуса:
+
+```bash
+sudo systemctl status shortsflow
+journalctl -u shortsflow -f  # живой лог
+```
+
+## Структура проекта
+
+```
+shortsflow/
+├── main.py              # основной файл бота
+├── ai_pipeline.py       # AI-режим: LLM + картинки + озвучка + ffmpeg
+├── requirements.txt     # Python-зависимости
+├── .env.example         # пример конфигурации
+├── .env                 # ваши настройки (не коммитить!)
+├── credentials.json     # OAuth-ключ Google (не коммитить!)
+├── token.json           # токен YouTube (создаётся автоматически)
+└── tmp/                 # временные файлы (удаляются после обработки)
+```
+
+## Лимиты
+
+- **Длительность Shorts**: ≤ 60 секунд (бот режет до 58 с запасом)
+- **Формат кадра**: 9:16 (горизонталь кадрируется по центру)
+- **Файл через Bot API**: до 20 МБ (локальный Bot API-сервер → до 2 ГБ)
+- **Загрузок в сутки**: ≈ 6 (1 600 из 10 000 единиц квоты YouTube)
+- **Доступ к боту**: только `chat_id` из `ALLOWED_IDS`
+
+## Бесплатный AI-стек
+
+- **LLM**: Groq (Llama 3.3 70B) — бесплатно, быстро
+- **Картинки**: Pollinations.ai — без ключа, без лимитов
+- **Озвучка**: edge-tts (Microsoft) — бесплатно, 300+ голосов
+- **Сборка**: ffmpeg — Ken Burns эффект + наложение аудио
+
+Если появится ключ Runway/Kling/Veo — подмените функцию `build_video()` в `ai_pipeline.py`. Остальной бот не изменится.
+
+## Безопасность
+
+- `.env`, `token.json`, `credentials.json` — в `.gitignore`
+- Бот отвечает только вашему `chat_id` — чужие запросы отклоняются и логируются
+- OAuth scope минимальный: только `youtube.upload` (ничего не читает)
+- Токен бота и OAuth-токены лежат только на вашей машине
+
+## Частые вопросы
+
+**Ролик попал в обычные видео, а не в Shorts. Почему?**
+YouTube относит ролик к Shorts, если он вертикальный (9:16) и не длиннее 60 секунд. Бот гарантирует оба условия. Дополнительно в заголовок подставляется `#Shorts`.
+
+**Какой максимальный размер файла?**
+Облачный Telegram Bot API отдаёт файлы до 20 МБ. Если нужно больше, поднимите локальный Bot API-сервер (официальный Docker-образ) — лимит вырастет до 2 ГБ.
+
+**Сколько видео можно публиковать в день?**
+Квота YouTube Data API — 10 000 единиц в сутки, одна загрузка стоит 1 600. Это примерно 6 Shorts в день. Для большего — подаётся заявка Google на расширение квоты.
+
+**Бот правда отвечает только мне?**
+Да. В `ALLOWED_IDS` перечислены разрешённые `chat_id` — все остальные получают «Доступ запрещён» и записываются в лог.
+
+**Где держать бота, чтобы он работал 24/7?**
+Любой VPS с 1 ГБ RAM. В комплекте systemd-юнит — бот стартует при загрузке сервера и перезапускается при падении.
+
+**Как сменить YouTube-аккаунт?**
+Удалите `token.json` и отправьте боту любое видео — авторизация пройдёт заново.
+
+**Что с авторскими правами?**
+Бот помечает ролики как «не для детей» (`selfDeclaredMadeForKids: false`). Ответственность за контент остаётся на владельце канала.
+
+## Лицензия
+
+MIT
+
+## Автор
+
+Создано для тех, кто снимает быстрее, чем загружает.
