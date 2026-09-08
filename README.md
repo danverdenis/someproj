@@ -24,7 +24,7 @@
 - ffmpeg (в PATH)
 - Telegram-аккаунт
 - Google-аккаунт с доступом к YouTube
-- Для AI-режима с лицом: OpenCV (устанавливается через requirements.txt)
+- Для AI-режима с лицом: OpenCV (устанавливается через requirements.txt). Если OpenCV не установится, бот будет работать без функции извлечения лица
 
 ## Установка
 
@@ -403,7 +403,7 @@ shortsflow/
 - **Картинки**: Pollinations.ai — без ключа, без лимитов
 - **Озвучка**: edge-tts (Microsoft) — бесплатно, 300+ голосов
 - **Сборка**: ffmpeg — Ken Burns эффект + наложение аудио
-- **Распознавание лиц**: OpenCV (Haar Cascades) — извлечение лица из фото для генерации персонажа
+- **Распознавание лиц**: OpenCV (Haar Cascades) — извлечение лица из фото для генерации персонажа. Если OpenCV не установится, бот продолжит работать без этой функции
 - **Версии**: OpenCV 4.8.1.78 (стабильная версия с полной поддержкой Haar Cascades)
 
 Если появится ключ Runway/Kling/Veo — подмените функцию `build_video()` в `ai_pipeline.py`. Остальной бот не изменится.
@@ -472,10 +472,13 @@ docker-compose up -d
 
 **Ошибка: `module 'cv2' has no attribute 'CascadeClassifier'`**
 Это значит, что OpenCV установился некорректно. Решения:
-1. Пересоберите образ с кешем: `docker-compose build --no-cache`
-2. Проверьте, что используется `opencv-contrib-python-headless==4.8.1.78` (не обычный `opencv-python`)
-3. Для локальной установки: `pip install opencv-contrib-python-headless==4.8.1.78 --force-reinstall`
+1. Пересоберите образ без кеша: `docker-compose build --no-cache`
+2. Проверьте, что используется `opencv-python==4.8.1.78` (не headless версия)
+3. Для локальной установки: `pip install opencv-python==4.8.1.78 --force-reinstall`
 4. Проверьте установку: `python -c "import cv2; print(cv2.__version__)"`
+
+**Бот работает, но не извлекает лицо из фото**
+Если OpenCV не установился, бот продолжит работать, но функция извлечения лица будет недоступна. В логах будет предупреждение: "OpenCV не установлен". Для исправления установите OpenCV вручную: `pip install opencv-python==4.8.1.78`
 
 ## Лицензия
 
