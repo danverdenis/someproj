@@ -525,6 +525,24 @@ docker stats shortsflow
 dmesg | grep -i "out of memory"
 ```
 
+**Ошибка: No audio was received от edge-tts**
+Это значит, что Microsoft TTS сервис не смог синтезировать речь. Возможные причины:
+- Временные проблемы с сервисом Microsoft
+- Голос недоступен в вашем регионе
+- Текст содержит недопустимые символы
+
+**Решение:**
+Бот автоматически пробует несколько голосов (Dmitry → Svetlana → Pavel → Guy) и делает retry. Если все попытки не удались:
+1. Подождите 5-10 минут и попробуйте снова
+2. Измените `TTS_VOICE` в `.env` на другой голос (например, `ru-RU-SvetlanaNeural`)
+3. Проверьте интернет-соединение контейнера
+
+**Список доступных голосов:**
+```bash
+# Внутри контейнера
+docker-compose exec shortsflow edge-tts --list-voices | grep ru-RU
+```
+
 **Как запустить бота в Docker?**
 См. раздел "Запуск в Docker" выше. Кратко: `docker-compose up -d` после настройки `.env` и `credentials.json`.
 

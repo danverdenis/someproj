@@ -385,22 +385,61 @@ def _fallback_image(prompt: str, *, width: int = 720, height: int = 1280, seed: 
 
 
 # ── Озвучка: edge-tts ─────────────────────────────────────────
-async def _tts(text: str, *, voice: str, out_path: str) -> float:
-    """Синтезирует речь, возвращает длительность в секундах."""
+async def _tts(text: str, *, voice: str, out_path: str, max_retries: int = 3) -> float:
+    """Синтезирует речь, возвращает длительность в секундах.
+    
+    При ошибке NoAudioReceived делает retry с другим голосом.
+    """
     try:
         import edge_tts
     except ImportError:
         raise RuntimeError("Установите edge-tts: pip install edge-tts")
 
-    communicate = edge_tts.Communicate(text, voice, rate="+5%")
-    await communicate.save(out_path)
-
-    # Длительность через ffprobe
-    raw = subprocess.check_output([
-        "ffprobe", "-v", "quiet", "-print_format", "json",
-        "-show_format", out_path,
-    ])
-    return float(json.loads(raw)["format"]["duration"])
+    # Fallback голоса если основной не работает
+    fallback_voices = [
+        "ru-RU-DmitryNeural",
+        "ru-RU-SvetlanaNeural",
+        "ru-RU-PavelNeural",
+        "en-US-GuyNeural",  # последний fallback
+    ]
+    
+    # Убираем основной голос из списка fallback если он там есть
+    voices_to_try = [voice] + [v for v in fallback_voices if v != voice]
+    
+    for attempt, voice_to_try in enumerate(voices_to_try[:max_retries]):
+        try:
+            log.info("TTS: пытаюсь голос %s (попытка %d)", voice_to_try, attempt + 1)
+            communicate = edge_tts.Communicate(text, voice_to_try, rate="+5%")
+            await communicate.save(out_path)
+            
+            # Проверяем, что файл создан и не пустой
+            if not os.path.exists(out_path) or os.path.getsize(out_path) == 0:
+                raise RuntimeError("TTS создал пустой файл")
+            
+            # Длительность через ffprobe
+            raw = subprocess.check_output([
+                "ffprobe", "-v", "quiet", "-print_format", "json",
+                "-show_format", out_path,
+            ])
+            duration = float(json.loads(raw)["format"]["duration"])
+            
+            if attempt > 0:
+                log.info("TTS: успешно с голосом %s после %d попыток", voice_to_try, attempt + 1)
+            
+            return duration
+            
+        except Exception as e:
+            log.warning("TTS ошибка с голосом %s: %s", voice_to_try, e)
+            if attempt < len(voices_to_try) - 1:
+                # Удаляем битый файл если он создан
+                if os.path.exists(out_path):
+                    os.remove(out_path)
+                continue
+            else:
+                raise RuntimeError(
+                    f"TTS не смог синтезировать речь ни одним из голосов. "
+                    f"Последняя ошибка: {e}"
+                )
 
 
 # ── Сборка видео: Ken Burns + аудио ───────────────────────────
