@@ -47,7 +47,7 @@ ALLOWED_IDS  = {int(x) for x in os.environ["ALLOWED_IDS"].split(",")}
 PRIVACY      = os.environ.get("PRIVACY", "unlisted")  # private|unlisted|public
 DEFAULT_TAGS = [t for t in os.environ.get("DEFAULT_TAGS", "shorts").split(",") if t]
 MAX_SECONDS  = int(os.environ.get("MAX_SECONDS", "58"))
-WORKDIR      = "tmp"
+WORKDIR      = os.path.abspath("tmp")
 
 # AI-настройки
 LLM_PROVIDER = os.environ.get("LLM_PROVIDER", "groq")  # groq|gemini|openrouter
