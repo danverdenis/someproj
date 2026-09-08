@@ -22,6 +22,7 @@ import subprocess
 import time
 import urllib.request
 import urllib.parse
+import urllib.error
 from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
@@ -204,9 +205,19 @@ def _llm_call(prompt: str, *, provider: str, api_key: str, model: str, scene_cou
     cfg = LLM_ENDPOINTS.get(provider, LLM_ENDPOINTS["groq"])
     url = cfg["url"]
     model = model or cfg["default_model"]
+    
+    # Проверка наличия API ключа
+    if not api_key:
+        raise ValueError(f"API ключ не указан для провайдера {provider}. "
+                        f"Добавьте LLM_API_KEY в .env файл")
+    
     headers = {"Content-Type": "application/json"}
-    if api_key:
-        headers["Authorization"] = f"Bearer {api_key}"
+    headers["Authorization"] = f"Bearer {api_key}"
+    
+    # Дополнительные заголовки для разных провайдеров
+    if provider == "openrouter":
+        headers["HTTP-Referer"] = "https://shortsflow.bot"
+        headers["X-Title"] = "ShortsFlow Bot"
 
     body = {
         "model": model,
@@ -220,8 +231,34 @@ def _llm_call(prompt: str, *, provider: str, api_key: str, model: str, scene_cou
 
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
-    with urllib.request.urlopen(req, timeout=60) as resp:
-        payload = json.loads(resp.read().decode("utf-8"))
+    
+    log.info("LLM запрос: %s · модель=%s · провайдер=%s", url, model, provider)
+    
+    try:
+        with urllib.request.urlopen(req, timeout=60) as resp:
+            payload = json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        # Читаем тело ошибки для диагностики
+        error_body = e.read().decode("utf-8", errors="ignore")
+        log.error("LLM HTTP ошибка %d: %s\nТело ответа: %s", e.code, e.reason, error_body[:500])
+        
+        # Понятные сообщения для частых ошибок
+        if e.code == 401:
+            raise ValueError(f"Неверный API ключ для {provider}. Проверьте LLM_API_KEY в .env")
+        elif e.code == 403:
+            raise ValueError(f"Доступ запрещён для {provider}. Возможные причины: "
+                           f"1) Неверный API ключ, 2) Модель недоступна, 3) Региональные ограничения. "
+                           f"Ответ API: {error_body[:200]}")
+        elif e.code == 404:
+            raise ValueError(f"Модель {model} не найдена у провайдера {provider}. "
+                           f"Проверьте LLM_MODEL в .env")
+        elif e.code == 429:
+            raise ValueError(f"Превышен лимит запросов для {provider}. Подождите или увеличьте квоту")
+        else:
+            raise ValueError(f"HTTP ошибка {e.code} от {provider}: {e.reason}")
+    except urllib.error.URLError as e:
+        log.error("LLM сетевая ошибка: %s", e.reason)
+        raise ValueError(f"Не удалось подключиться к {provider}: {e.reason}")
 
     content = payload["choices"][0]["message"]["content"]
     # Парсим JSON, отрезая возможные markdown-обёртки
