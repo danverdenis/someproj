@@ -177,6 +177,15 @@ LLM_ENDPOINTS = {
         "url": "https://openrouter.ai/api/v1/chat/completions",
         "default_model": "meta-llama/llama-3.3-70b-instruct:free",
     },
+    # Прокси-провайдеры для обхода региональных ограничений
+    "siliconflow": {
+        "url": "https://api.siliconflow.cn/v1/chat/completions",
+        "default_model": "Qwen/Qwen2.5-72B-Instruct",
+    },
+    "deepseek": {
+        "url": "https://api.deepseek.com/v1/chat/completions",
+        "default_model": "deepseek-chat",
+    },
 }
 
 SYSTEM_PROMPT = """Ты — сценарист коротких вертикальных видео (Shorts/Reels/TikTok).
@@ -209,7 +218,7 @@ def _llm_call(prompt: str, *, provider: str, api_key: str, model: str, scene_cou
     # Проверка наличия API ключа
     if not api_key:
         raise ValueError(f"API ключ не указан для провайдера {provider}. "
-                        f"Добавьте LLM_API_KEY в .env файл")
+                         f"Добавьте LLM_API_KEY в .env файл")
     
     headers = {"Content-Type": "application/json"}
     headers["Authorization"] = f"Bearer {api_key}"
@@ -232,11 +241,26 @@ def _llm_call(prompt: str, *, provider: str, api_key: str, model: str, scene_cou
     data = json.dumps(body).encode("utf-8")
     req = urllib.request.Request(url, data=data, headers=headers, method="POST")
     
+    # Поддержка HTTP-прокси для обхода региональных ограничений
+    proxy_url = os.environ.get("LLM_PROXY", "")
+    proxy_handler = None
+    if proxy_url:
+        log.info("LLM запрос через прокси: %s", proxy_url)
+        proxy_handler = urllib.request.ProxyHandler({
+            "http": proxy_url,
+            "https": proxy_url,
+        })
+    
     log.info("LLM запрос: %s · модель=%s · провайдер=%s", url, model, provider)
     
     try:
-        with urllib.request.urlopen(req, timeout=60) as resp:
-            payload = json.loads(resp.read().decode("utf-8"))
+        if proxy_handler:
+            opener = urllib.request.build_opener(proxy_handler)
+            with opener.open(req, timeout=60) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
+        else:
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                payload = json.loads(resp.read().decode("utf-8"))
     except urllib.error.HTTPError as e:
         # Читаем тело ошибки для диагностики
         error_body = e.read().decode("utf-8", errors="ignore")
@@ -246,9 +270,15 @@ def _llm_call(prompt: str, *, provider: str, api_key: str, model: str, scene_cou
         if e.code == 401:
             raise ValueError(f"Неверный API ключ для {provider}. Проверьте LLM_API_KEY в .env")
         elif e.code == 403:
-            raise ValueError(f"Доступ запрещён для {provider}. Возможные причины: "
-                           f"1) Неверный API ключ, 2) Модель недоступна, 3) Региональные ограничения. "
-                           f"Ответ API: {error_body[:200]}")
+            raise ValueError(
+                f"Доступ запрещён для {provider} (региональные ограничения).\n\n"
+                f"Решения:\n"
+                f"1. Смените провайдера в .env: LLM_PROVIDER=gemini (бесплатный, без блокировок)\n"
+                f"2. Или: LLM_PROVIDER=deepseek (работает в большинстве регионов)\n"
+                f"3. Или: LLM_PROVIDER=openrouter (проксирует через свои серверы)\n"
+                f"4. Или используйте прокси: LLM_PROXY=http://proxy:port в .env\n\n"
+                f"Ответ API: {error_body[:200]}"
+            )
         elif e.code == 404:
             raise ValueError(f"Модель {model} не найдена у провайдера {provider}. "
                            f"Проверьте LLM_MODEL в .env")
@@ -266,7 +296,6 @@ def _llm_call(prompt: str, *, provider: str, api_key: str, model: str, scene_cou
     if content.startswith("```"):
         content = content.split("\n", 1)[1].rsplit("```", 1)[0].strip()
     return json.loads(content)
-
 
 def expand_script(idea: str, *, provider: str = "groq", api_key: str = "",
                   model: str = "", scene_count: int = 5) -> dict:
