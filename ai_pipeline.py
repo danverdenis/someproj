@@ -470,10 +470,10 @@ async def _build_with_ffmpeg(scenes: list[dict], *, job: str, workdir: str,
         if i < len(scenes) - 1:
             await asyncio.sleep(2)  # 2 секунды между запросами
 
-    # 2. Сохраняем картинки
+    # 2. Сохраняем картинки (используем абсолютные пути)
     img_paths = []
     for i, data in enumerate(image_bytes):
-        p = f"{workdir}/{job}_img_{i}.jpg"
+        p = os.path.abspath(f"{workdir}/{job}_img_{i}.jpg")
         with open(p, "wb") as f:
             f.write(data)
         img_paths.append(p)
@@ -482,7 +482,7 @@ async def _build_with_ffmpeg(scenes: list[dict], *, job: str, workdir: str,
     audio_paths = []
     durations = []
     for i, s in enumerate(scenes):
-        ap = f"{workdir}/{job}_voice_{i}.mp3"
+        ap = os.path.abspath(f"{workdir}/{job}_voice_{i}.mp3")
         dur = await _tts(s["voice"], voice=tts_voice, out_path=ap)
         audio_paths.append(ap)
         durations.append(max(2.0, min(12.0, dur + 0.5)))  # чуть длиннее голоса
@@ -496,7 +496,7 @@ async def _build_with_ffmpeg(scenes: list[dict], *, job: str, workdir: str,
     # 4a. Для каждой сцены создаём отдельный клип (картинка + аудио)
     clip_paths = []
     for i, (img_path, audio_path, dur) in enumerate(zip(img_paths, audio_paths, durations)):
-        clip_path = f"{workdir}/{job}_clip_{i}.mp4"
+        clip_path = os.path.abspath(f"{workdir}/{job}_clip_{i}.mp4")
         # Простой scale + fps, без zoompan (zoompan жрёт память)
         clip_cmd = [
             "ffmpeg", "-y",
@@ -533,11 +533,14 @@ async def _build_with_ffmpeg(scenes: list[dict], *, job: str, workdir: str,
         clip_paths.append(clip_path)
     
     # 4b. Создаём файл списка для concat demuxer
-    concat_list_path = f"{workdir}/{job}_concat.txt"
+    # ВАЖНО: используем абсолютные пути, иначе ffmpeg не найдёт файлы
+    # (concat-файл в tmp/, и относительные пути в нём интерпретируются от tmp/)
+    concat_list_path = os.path.abspath(f"{workdir}/{job}_concat.txt")
     with open(concat_list_path, "w") as f:
         for cp in clip_paths:
+            abs_path = os.path.abspath(cp)
             # Пути должны быть экранированы для ffmpeg concat
-            escaped = cp.replace("'", "'\\''")
+            escaped = abs_path.replace("'", "'\\''")
             f.write(f"file '{escaped}'\n")
     
     # 4c. Финальная склейка + апскейл до 1080x1920
@@ -608,7 +611,7 @@ async def build_video(script: dict, *, job: str, workdir: str,
     (Runway/Kling/Veo). Подмените содержимое функции — остальной бот
     не изменится.
     """
-    out = f"{workdir}/{job}_final.mp4"
+    out = os.path.abspath(f"{workdir}/{job}_final.mp4")
     
     # Если есть лицо, создаём описание для промптов
     if face_path and not face_description:
