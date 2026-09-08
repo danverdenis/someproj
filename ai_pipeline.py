@@ -23,7 +23,6 @@ import time
 import urllib.request
 import urllib.parse
 import urllib.error
-from concurrent.futures import ThreadPoolExecutor
 
 import numpy as np
 
@@ -316,10 +315,12 @@ def expand_script(idea: str, *, provider: str = "groq", api_key: str = "",
 
 # ── Картинки: Pollinations.ai (без ключа) ─────────────────────
 def _pollinations_image(prompt: str, *, seed: int = 0, width: int = 720, height: int = 1280,
-                        face_description: str = "") -> bytes:
+                        face_description: str = "", max_retries: int = 3) -> bytes:
     """Рисует кадр 9:16 через Pollinations. Возвращает JPEG-байты.
     
     Если передано face_description, добавляет его в промпт для сохранения внешности.
+    При ошибке 429 (Too Many Requests) делает retry с exponential backoff.
+    При неудаче использует fallback на стоковые фото.
     """
     # Если есть описание лица, добавляем его в промпт
     if face_description:
@@ -335,9 +336,51 @@ def _pollinations_image(prompt: str, *, seed: int = 0, width: int = 720, height:
         "model": "flux",
     })
     url = f"https://image.pollinations.ai/prompt/{urllib.parse.quote(full_prompt)}?{params}"
+    
+    # Retry с exponential backoff для 429 ошибок
+    for attempt in range(max_retries):
+        try:
+            req = urllib.request.Request(url, headers={"User-Agent": "ShortsFlow/1.0"})
+            with urllib.request.urlopen(req, timeout=90) as resp:
+                return resp.read()
+        except urllib.error.HTTPError as e:
+            if e.code == 429 and attempt < max_retries - 1:
+                # Too Many Requests — ждём и пробуем снова
+                wait_time = 2 ** attempt  # 1, 2, 4 секунды
+                log.warning("Pollinations: 429 Too Many Requests, retry #%d через %ds", attempt + 1, wait_time)
+                time.sleep(wait_time)
+                continue
+            else:
+                log.error("Pollinations HTTP ошибка %d: %s", e.code, e.reason)
+                break
+        except Exception as e:
+            log.error("Pollinations ошибка: %s", e)
+            break
+    
+    # Fallback: используем стоковые фото с picsum.photos
+    log.warning("Pollinations недоступен, использую fallback на стоковые фото")
+    return _fallback_image(prompt, width=width, height=height, seed=seed)
+
+
+def _fallback_image(prompt: str, *, width: int = 720, height: int = 1280, seed: int = 0) -> bytes:
+    """Fallback: стоковые фото с picsum.photos (без AI, но всегда работает)."""
+    # picsum.photos даёт случайные стоковые фото
+    # Используем seed для воспроизводимости
+    url = f"https://picsum.photos/seed/{seed}/{width}/{height}"
     req = urllib.request.Request(url, headers={"User-Agent": "ShortsFlow/1.0"})
-    with urllib.request.urlopen(req, timeout=90) as resp:
-        return resp.read()
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.read()
+    except Exception as e:
+        log.error("Fallback picsum.photos тоже не работает: %s", e)
+        # Последний fallback: генерируем пустое изображение
+        if OPENCV_AVAILABLE:
+            import numpy as np
+            img = np.zeros((height, width, 3), dtype=np.uint8)
+            img[:] = (30, 30, 50)  # тёмно-синий фон
+            _, buffer = cv2.imencode('.jpg', img)
+            return buffer.tobytes()
+        raise RuntimeError("Не удалось получить изображение ни от одного провайдера")
 
 
 # ── Озвучка: edge-tts ─────────────────────────────────────────
@@ -369,15 +412,17 @@ def _build_with_ffmpeg(scenes: list[dict], *, job: str, workdir: str,
     loop = asyncio.new_event_loop()
     asyncio.set_event_loop(loop)
 
-    # 1. Параллельно рисуем кадры
+    # 1. Последовательно рисуем кадры (чтобы не превысить лимиты Pollinations)
     log.info("Рисую %d кадров через Pollinations…", len(scenes))
-    with ThreadPoolExecutor(max_workers=3) as pool:
-        futures = [
-            pool.submit(_pollinations_image, s["visual"], seed=hash(s["visual"]) % 10000 + i,
-                       face_description=face_description)
-            for i, s in enumerate(scenes)
-        ]
-        image_bytes = [f.result() for f in futures]
+    image_bytes = []
+    for i, s in enumerate(scenes):
+        log.info("Кадр %d/%d: %s", i + 1, len(scenes), s["visual"][:50])
+        img_bytes = _pollinations_image(s["visual"], seed=hash(s["visual"]) % 10000 + i,
+                                        face_description=face_description)
+        image_bytes.append(img_bytes)
+        # Задержка между запросами (кроме последнего)
+        if i < len(scenes) - 1:
+            time.sleep(2)  # 2 секунды между запросами
 
     # 2. Сохраняем картинки
     img_paths = []
