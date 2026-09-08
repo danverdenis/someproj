@@ -273,8 +273,8 @@ async def on_idea(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             await status.edit_text(f"Сценарий готов. Рисую кадры ({len(script['scenes'])} шт)…")
 
         # 2. Сборка видео: кадры + озвучка + склейка
-        video_path = build_video(script, job=job, workdir=WORKDIR,
-                                 tts_voice=TTS_VOICE, face_path=face_path)
+        video_path = await build_video(script, job=job, workdir=WORKDIR,
+                                       tts_voice=TTS_VOICE, face_path=face_path)
         await status.edit_text("Видео собрано. Отправляю превью…")
 
         # 3. Превью с кнопками

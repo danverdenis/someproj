@@ -496,6 +496,14 @@ Pollinations.ai имеет лимиты на бесплатные запросы
 **Как работает fallback на стоковые фото?**
 Если Pollinations.ai недоступен (429, 500, timeout), бот автоматически использует picsum.photos — сервис стоковых фотографий. Кадры будут не AI-сгенерированными, но всё равно подойдут для видео. Это гарантирует, что бот всегда сможет создать ролик.
 
+**Ошибка: Cannot run the event loop while another loop is running**
+Эта ошибка возникала в старых версиях из-за конфликта event loops. Исправлено в текущей версии — `build_video()` теперь асинхронная функция. Если видите эту ошибку, обновите код и пересоберите образ:
+```bash
+docker-compose down
+docker-compose build --no-cache
+docker-compose up -d
+```
+
 **Как запустить бота в Docker?**
 См. раздел "Запуск в Docker" выше. Кратко: `docker-compose up -d` после настройки `.env` и `credentials.json`.
 

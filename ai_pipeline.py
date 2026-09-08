@@ -23,6 +23,7 @@ import time
 import urllib.request
 import urllib.parse
 import urllib.error
+from functools import partial
 
 import numpy as np
 
@@ -403,26 +404,32 @@ async def _tts(text: str, *, voice: str, out_path: str) -> float:
 
 
 # ── Сборка видео: Ken Burns + аудио ───────────────────────────
-def _build_with_ffmpeg(scenes: list[dict], *, job: str, workdir: str,
-                       tts_voice: str, out_path: str, face_description: str = "") -> str:
+async def _build_with_ffmpeg(scenes: list[dict], *, job: str, workdir: str,
+                             tts_voice: str, out_path: str, face_description: str = "") -> str:
     """Собирает ролик из сцен: кадры с Ken Burns + озвучка.
     
     Если передано face_description, использует его для сохранения внешности персонажа.
+    Асинхронная версия — корректно работает внутри event loop Telegram-бота.
     """
-    loop = asyncio.new_event_loop()
-    asyncio.set_event_loop(loop)
+    loop = asyncio.get_running_loop()
 
-    # 1. Последовательно рисуем кадры (чтобы не превысить лимиты Pollinations)
+    # 1. Последовательно рисуем кадры в executor (чтобы не блокировать event loop)
     log.info("Рисую %d кадров через Pollinations…", len(scenes))
     image_bytes = []
     for i, s in enumerate(scenes):
         log.info("Кадр %d/%d: %s", i + 1, len(scenes), s["visual"][:50])
-        img_bytes = _pollinations_image(s["visual"], seed=hash(s["visual"]) % 10000 + i,
-                                        face_description=face_description)
+        # Запускаем в executor чтобы не блокировать event loop
+        visual = s["visual"]
+        seed = hash(visual) % 10000 + i
+        img_bytes = await loop.run_in_executor(
+            None,
+            partial(_pollinations_image, visual, seed=seed,
+                    face_description=face_description)
+        )
         image_bytes.append(img_bytes)
         # Задержка между запросами (кроме последнего)
         if i < len(scenes) - 1:
-            time.sleep(2)  # 2 секунды между запросами
+            await asyncio.sleep(2)  # 2 секунды между запросами
 
     # 2. Сохраняем картинки
     img_paths = []
@@ -432,16 +439,14 @@ def _build_with_ffmpeg(scenes: list[dict], *, job: str, workdir: str,
             f.write(data)
         img_paths.append(p)
 
-    # 3. Синтезируем озвучку для каждой сцены
+    # 3. Синтезируем озвучку для каждой сцены (асинхронно)
     audio_paths = []
     durations = []
     for i, s in enumerate(scenes):
         ap = f"{workdir}/{job}_voice_{i}.mp3"
-        dur = loop.run_until_complete(_tts(s["voice"], voice=tts_voice, out_path=ap))
+        dur = await _tts(s["voice"], voice=tts_voice, out_path=ap)
         audio_paths.append(ap)
         durations.append(max(2.0, min(12.0, dur + 0.5)))  # чуть длиннее голоса
-
-    loop.close()
 
     # 4. Склеиваем: Ken Burns (медленный зум) + аудио
     # Для каждой сцены: картинка → zoompan → concat
@@ -483,9 +488,9 @@ def _build_with_ffmpeg(scenes: list[dict], *, job: str, workdir: str,
 
 
 # ── Главная точка сборки видео ────────────────────────────────
-def build_video(script: dict, *, job: str, workdir: str,
-                tts_voice: str = "ru-RU-DmitryNeural",
-                face_path: str = "", face_description: str = "") -> str:
+async def build_video(script: dict, *, job: str, workdir: str,
+                      tts_voice: str = "ru-RU-DmitryNeural",
+                      face_path: str = "", face_description: str = "") -> str:
     """Сценарий → mp4-файл.
 
     Если передан face_path, использует лицо для сохранения внешности персонажа
@@ -504,6 +509,6 @@ def build_video(script: dict, *, job: str, workdir: str,
     if face_description:
         log.info("Использую лицо персонажа: %s", face_description)
     
-    return _build_with_ffmpeg(script["scenes"], job=job, workdir=workdir,
-                              tts_voice=tts_voice, out_path=out,
-                              face_description=face_description)
+    return await _build_with_ffmpeg(script["scenes"], job=job, workdir=workdir,
+                                    tts_voice=tts_voice, out_path=out,
+                                    face_description=face_description)
