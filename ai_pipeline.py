@@ -450,22 +450,30 @@ async def _build_with_ffmpeg(scenes: list[dict], *, job: str, workdir: str,
 
     # 4. Склеиваем: Ken Burns (медленный зум) + аудио
     # Для каждой сцены: картинка → zoompan → concat
+    # ВАЖНО: используем 540x960 вместо 1080x1920, чтобы не исчерпать память
+    # (OOM killer убивает ffmpeg при 1080x1920 с несколькими сценами)
+    # Финальный апскейл до 1080x1920 делаем после concat
     filter_parts = []
     concat_inputs = []
     for i, (img, dur) in enumerate(zip(img_paths, durations)):
         frames = int(dur * 25)
         # Ken Burns: от 1.0 до 1.15 зума, центрированный
+        # Рабочее разрешение 540x960 (в 4 раза меньше памяти, чем 1080x1920)
         filter_parts.append(
-            f"[{i}:v]scale=1200:2134,zoompan=z='min(zoom+0.0008,1.15)'"
+            f"[{i}:v]scale=600:1067,zoompan=z='min(zoom+0.0008,1.15)'"
             f":x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'"
-            f":d={frames}:s=1080x1920:fps=25[v{i}]"
+            f":d={frames}:s=540x960:fps=25[v{i}]"
         )
         concat_inputs.append(f"[v{i}][{len(img_paths) + i}:a]")
 
-    # Конкатенация видео и аудио
+    # Конкатенация видео и аудио + финальный апскейл до 1080x1920
     n = len(scenes)
     filter_parts.append(
-        f"{ ''.join(concat_inputs) }concat=n={n}:v=1:a=1[outv][outa]"
+        f"{ ''.join(concat_inputs) }concat=n={n}:v=1:a=1[concatv][outa]"
+    )
+    # Апскейл до 1080x1920 (Shorts требует вертикаль)
+    filter_parts.append(
+        "[concatv]scale=1080:1920:flags=lanczos[outv]"
     )
     filter_complex = ";".join(filter_parts)
 
@@ -478,12 +486,43 @@ async def _build_with_ffmpeg(scenes: list[dict], *, job: str, workdir: str,
     cmd = ["ffmpeg", "-y", *inputs,
            "-filter_complex", filter_complex,
            "-map", "[outv]", "-map", "[outa]",
-           "-c:v", "libx264", "-preset", "veryfast", "-crf", "22",
-           "-c:a", "aac", "-b:a", "128k",
+           "-c:v", "libx264", "-preset", "veryfast", "-crf", "23",
+           "-c:a", "aac", "-b:a", "96k",
            "-movflags", "+faststart",
+           "-threads", "2",
            out_path]
     log.info("ffmpeg: собираю ролик (%d сцен, %.1f c)…", n, sum(durations))
-    subprocess.run(cmd, check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    
+    # Запускаем ffmpeg в executor (не блокирует event loop)
+    # и ловим stderr для диагностики
+    def _run_ffmpeg():
+        proc = subprocess.run(
+            cmd,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            timeout=300,  # 5 минут максимум
+        )
+        if proc.returncode != 0:
+            stderr_text = proc.stderr.decode("utf-8", errors="ignore")
+            log.error("ffmpeg stderr:\n%s", stderr_text[-2000:])
+            raise subprocess.CalledProcessError(
+                proc.returncode, cmd, proc.stdout, proc.stderr
+            )
+        return proc
+    
+    try:
+        await loop.run_in_executor(None, _run_ffmpeg)
+    except subprocess.CalledProcessError as e:
+        stderr_text = e.stderr.decode("utf-8", errors="ignore") if e.stderr else ""
+        raise RuntimeError(
+            f"ffmpeg не смог собрать видео (код {e.returncode}). "
+            f"Возможные причины: нехватка памяти, повреждённые кадры. "
+            f"Попробуйте уменьшить SCENE_COUNT в .env до 3. "
+            f"Лог ffmpeg: {stderr_text[-500:]}"
+        )
+    except subprocess.TimeoutExpired:
+        raise RuntimeError("ffmpeg работал слишком долго (>5 мин). Уменьшите SCENE_COUNT.")
+    
     return out_path
 
 

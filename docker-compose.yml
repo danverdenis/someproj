@@ -24,10 +24,11 @@ services:
         max-size: "10m"
         max-file: "3"
     
-    # Ограничения ресурсов (опционально)
+    # Ограничения ресурсов
+    # ВАЖНО: ffmpeg для генерации видео требует минимум 1.5 ГБ RAM
     deploy:
       resources:
         limits:
-          memory: 1G
+          memory: 2G
         reservations:
-          memory: 512M
+          memory: 1G
