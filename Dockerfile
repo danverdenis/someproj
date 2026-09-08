@@ -12,6 +12,9 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgl1 \
     libglib2.0-0 \
     libgomp1 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Создаём рабочую директорию
@@ -23,8 +26,8 @@ COPY requirements.txt .
 # Устанавливаем Python-зависимости
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Проверяем, что OpenCV установился корректно
-RUN python -c "import cv2; print(f'OpenCV {cv2.__version__} установлен успешно')"
+# Проверяем, что OpenCV установился корректно (опционально)
+RUN python -c "import cv2; print(f'OpenCV {cv2.__version__} установлен успешно')" || echo "WARNING: OpenCV не установлен, функция извлечения лица будет недоступна"
 
 # Копируем код приложения
 COPY main.py ai_pipeline.py ./

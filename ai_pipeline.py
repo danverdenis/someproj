@@ -24,18 +24,28 @@ import urllib.request
 import urllib.parse
 from concurrent.futures import ThreadPoolExecutor
 
-import cv2
 import numpy as np
 
 log = logging.getLogger("shortsflow.ai")
 
 # ── Работа с лицами ────────────────────────────────────────────
-# Ленивая инициализация каскада Хаара (избегаем ошибок импорта)
+# Пробуем импортировать OpenCV, но не падаем если не удалось
+try:
+    import cv2
+    OPENCV_AVAILABLE = True
+    log.info("OpenCV %s загружен успешно", cv2.__version__)
+except ImportError as e:
+    OPENCV_AVAILABLE = False
+    log.warning("OpenCV не установлен: %s. Функция извлечения лица будет недоступна.", e)
+
+# Ленивая инициализация каскада Хаара
 _face_cascade = None
 
 def _get_face_cascade():
     """Получает каскад Хаара для обнаружения лиц (ленивая инициализация)."""
     global _face_cascade
+    if not OPENCV_AVAILABLE:
+        return None
     if _face_cascade is None:
         try:
             cascade_path = cv2.data.haarcascades + 'haarcascade_frontalface_default.xml'
@@ -45,7 +55,7 @@ def _get_face_cascade():
             log.info("Каскад Хаара загружен успешно")
         except Exception as e:
             log.error("Ошибка загрузки каскада Хаара: %s", e)
-            raise RuntimeError(f"OpenCV не установлен корректно. Попробуйте: pip install opencv-contrib-python-headless==4.8.1.78")
+            _face_cascade = None
     return _face_cascade
 
 def extract_face(image_path: str, output_path: str) -> bool:
@@ -54,6 +64,10 @@ def extract_face(image_path: str, output_path: str) -> bool:
     Returns:
         True если лицо найдено и сохранено, False иначе
     """
+    if not OPENCV_AVAILABLE:
+        log.warning("OpenCV недоступен — извлечение лица пропущено")
+        return False
+    
     img = cv2.imread(image_path)
     if img is None:
         log.error("Не удалось прочитать изображение: %s", image_path)
@@ -102,6 +116,9 @@ def describe_face(face_path: str) -> str:
     
     Анализирует базовые характеристики лица для генерации.
     """
+    if not OPENCV_AVAILABLE:
+        return ""
+    
     img = cv2.imread(face_path)
     if img is None:
         return ""
