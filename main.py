@@ -301,6 +301,10 @@ async def on_idea(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             "idea": idea,
         }
 
+    except ValueError as e:
+        # Ожидаемые ошибки (неверный ключ, модель не найдена и т.д.)
+        log.error("AI-режим: ошибка конфигурации — %s", e)
+        await status.edit_text(f"❌ Ошибка AI-режима:\n\n{e}\n\nПроверьте настройки в .env файле.")
     except Exception as e:
         log.exception("AI-режим упал")
         await status.edit_text(f"Не удалось собрать ролик: {e}")
