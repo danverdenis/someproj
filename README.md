@@ -12,7 +12,8 @@
 - Приватность: отвечает только вашему `chat_id` (whitelist)
 - Автоматическая обрезка до 60 секунд и кадрирование в вертикаль 9:16
 - OAuth 2.0 для YouTube с автообновлением токена
-- AI-режим: бесплатная LLM (Groq/Gemini/OpenRouter) + бесплатные картинки (Pollinations) + бесплатная озвучка (edge-tts)
+- AI-режим: бесплатная LLM (Gemini/DeepSeek/OpenRouter/Groq) + бесплатные картинки (Pollinations) + бесплатная озвучка (edge-tts)
+- **Обход региональных ограничений**: поддержка HTTP/SOCKS прокси, несколько провайдеров LLM на выбор
 - **Генерация с лицом**: отправьте фото → бот извлечёт лицо и будет использовать вашу внешность в AI-видео
 - Превью перед публикацией — вы решаете, что уходит на канал
 - Resumable-загрузка (обрыв сети не убивает публикацию)
@@ -94,17 +95,33 @@ brew install ffmpeg
    - Нажмите **Create**
 8. Скачайте JSON и сохраните как `credentials.json` в папке проекта
 
-### 7. Получите бесплатный ключ Groq (для AI-режима)
+### 7. Получите бесплатный ключ LLM (для AI-режима)
 
-1. Откройте [Groq Console](https://console.groq.com/)
-2. Зарегистрируйтесь (бесплатно)
-3. Перейдите в **API Keys**
-4. Создайте новый ключ
-5. Скопируйте ключ (начинается с `gsk_...`)
+**Рекомендуем Gemini** (бесплатный, работает без региональных ограничений):
 
-**Альтернативы:**
-- **Gemini**: получите ключ на [Google AI Studio](https://aistudio.google.com/app/apikey)
-- **OpenRouter**: зарегистрируйтесь на [OpenRouter](https://openrouter.ai/) (есть бесплатные модели)
+1. Откройте [Google AI Studio](https://aistudio.google.com/app/apikey)
+2. Войдите через Google-аккаунт
+3. Нажмите **Create API Key**
+4. Скопируйте ключ (начинается с `AIza...`)
+
+**Альтернативные провайдеры:**
+
+- **DeepSeek** (бесплатный, работает в большинстве регионов):
+  1. Откройте [DeepSeek Platform](https://platform.deepseek.com/)
+  2. Зарегистрируйтесь
+  3. Создайте API ключ (начинается с `sk-...`)
+
+- **OpenRouter** (проксирует через свои серверы, обходит блокировки):
+  1. Откройте [OpenRouter](https://openrouter.ai/keys)
+  2. Зарегистрируйтесь
+  3. Создайте ключ (начинается с `sk-or-...`)
+  4. Используйте бесплатные модели: `meta-llama/llama-3.3-70b-instruct:free`
+
+- **Groq** (очень быстрый, но есть региональные ограничения):
+  1. Откройте [Groq Console](https://console.groq.com/)
+  2. Зарегистрируйтесь
+  3. Создайте ключ (начинается с `gsk_...`)
+  4. ⚠️ Если Groq заблокирован в вашем регионе, используйте Gemini или DeepSeek
 
 ### 8. Настройте .env
 
@@ -125,12 +142,15 @@ PRIVACY=unlisted
 DEFAULT_TAGS=shorts,автопостинг
 MAX_SECONDS=58
 
-# AI-режим
-LLM_PROVIDER=groq
-LLM_API_KEY=gsk_xxxxxxxxxxxxxx
-LLM_MODEL=llama-3.3-70b-versatile
+# AI-режим (рекомендуем Gemini — без региональных ограничений)
+LLM_PROVIDER=gemini
+LLM_API_KEY=AIzaSyxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+LLM_MODEL=gemini-2.0-flash
 TTS_VOICE=ru-RU-DmitryNeural
 SCENE_COUNT=5
+
+# Опционально: прокси для обхода региональных ограничений
+# LLM_PROXY=http://127.0.0.1:7890
 ```
 
 **Переменные:**
@@ -139,11 +159,16 @@ SCENE_COUNT=5
 - `PRIVACY` — статус роликов: `private` (только вы), `unlisted` (по ссылке), `public` (все)
 - `DEFAULT_TAGS` — теги для каждого ролика
 - `MAX_SECONDS` — максимальная длительность (бот обрежет всё длиннее)
-- `LLM_PROVIDER` — провайдер LLM: `groq`, `gemini`, `openrouter`
+- `LLM_PROVIDER` — провайдер LLM: `gemini` (рекомендуем), `deepseek`, `openrouter`, `groq`
 - `LLM_API_KEY` — ключ API от провайдера
-- `LLM_MODEL` — модель (по умолчанию `llama-3.3-70b-versatile` для Groq)
+- `LLM_MODEL` — модель для генерации сценария:
+  - Gemini: `gemini-2.0-flash` (по умолчанию)
+  - DeepSeek: `deepseek-chat`
+  - OpenRouter: `meta-llama/llama-3.3-70b-instruct:free`
+  - Groq: `llama-3.3-70b-versatile`
 - `TTS_VOICE` — голос озвучки (список голосов: `edge-tts --list-voices`)
-- `SCENE_COUNT` — количество сцен в AI-ролике
+- `SCENE_COUNT` — количество сцен в AI-ролике (3-7)
+- `LLM_PROXY` — HTTP/ SOCKS прокси для обхода региональных ограничений (опционально)
 
 ### 9. Первый запуск
 
@@ -399,11 +424,17 @@ shortsflow/
 
 ## Бесплатный AI-стек
 
-- **LLM**: Groq (Llama 3.3 70B) — бесплатно, быстро
+- **LLM**: несколько провайдеров на выбор (все бесплатные):
+  - **Gemini** (рекомендуем) — бесплатный, работает без региональных ограничений
+  - **DeepSeek** — бесплатный, работает в большинстве регионов
+  - **OpenRouter** — проксирует через свои серверы, обходит блокировки
+  - **Groq** — очень быстрый, но есть региональные ограничения
+  - **SiliconFlow** — работает в Китае и Азии
 - **Картинки**: Pollinations.ai — без ключа, без лимитов
 - **Озвучка**: edge-tts (Microsoft) — бесплатно, 300+ голосов
 - **Сборка**: ffmpeg — Ken Burns эффект + наложение аудио
 - **Распознавание лиц**: OpenCV (Haar Cascades) — извлечение лица из фото для генерации персонажа. Если OpenCV не установится, бот продолжит работать без этой функции
+- **Прокси**: поддержка HTTP/SOCKS прокси для обхода региональных ограничений
 - **Версии**: OpenCV 4.8.1.78 (стабильная версия с полной поддержкой Haar Cascades)
 
 Если появится ключ Runway/Kling/Veo — подмените функцию `build_video()` в `ai_pipeline.py`. Остальной бот не изменится.
@@ -480,12 +511,51 @@ docker-compose up -d
 **Бот работает, но не извлекает лицо из фото**
 Если OpenCV не установился, бот продолжит работать, но функция извлечения лица будет недоступна. В логах будет предупреждение: "OpenCV не установлен". Для исправления установите OpenCV вручную: `pip install opencv-python==4.8.1.78`
 
-**Ошибка AI-режима: HTTP 403 Forbidden / неверный API ключ**
-Это значит, что LLM API отклоняет запрос. Проверьте:
-1. **API ключ указан в .env**: `LLM_API_KEY=gsk_...` (для Groq) или соответствующий ключ для Gemini/OpenRouter
-2. **Ключ действителен**: зайдите в консоль провайдера и проверьте, что ключ активен
-3. **Провайдер доступен**: попробуйте другой провайдер (Groq → Gemini → OpenRouter)
-4. **Модель существует**: проверьте `LLM_MODEL` в .env — для Groq используйте `llama-3.3-70b-versatile`
+**Ошибка AI-режима: HTTP 403 Forbidden / региональные ограничения**
+Это значит, что LLM API отклоняет запрос из-за региональных ограничений (например, Groq заблокирован в некоторых странах).
+
+**Решение 1 — смените провайдера (самое простое):**
+
+В файле `.env` измените:
+```env
+# Вместо Groq используйте один из:
+LLM_PROVIDER=gemini              # Google Gemini — бесплатный, работает везде
+LLM_API_KEY=AIza...              # получите на https://aistudio.google.com/app/apikey
+LLM_MODEL=gemini-2.0-flash
+
+# Или:
+LLM_PROVIDER=deepseek            # DeepSeek — бесплатный, работает в большинстве регионов
+LLM_API_KEY=sk-...               # получите на https://platform.deepseek.com/
+LLM_MODEL=deepseek-chat
+
+# Или:
+LLM_PROVIDER=openrouter          # OpenRouter — проксирует через свои серверы
+LLM_API_KEY=sk-or-...            # получите на https://openrouter.ai/keys
+LLM_MODEL=meta-llama/llama-3.3-70b-instruct:free
+```
+
+**Решение 2 — используйте HTTP-прокси:**
+
+Если у вас есть прокси-сервер в регионе без ограничений:
+```env
+LLM_PROXY=http://user:pass@proxy.example.com:8080
+# или
+LLM_PROXY=socks5://proxy.example.com:1080
+```
+
+**Решение 3 — VPS в другом регионе:**
+
+Запустите бота на VPS в регионе без ограничений (США, Европа, Азия). Большинство провайдеров VPS (DigitalOcean, Hetzner, Vultr) имеют серверы в разных регионах.
+
+**Сравнение провайдеров:**
+
+| Провайдер | Бесплатно | Регионы | Скорость | Ключ |
+|-----------|-----------|---------|----------|------|
+| Gemini | ✅ Да | ✅ Почти везде | Быстро | https://aistudio.google.com/app/apikey |
+| DeepSeek | ✅ Да | ✅ Большинство | Быстро | https://platform.deepseek.com/ |
+| OpenRouter | ✅ Есть free-модели | ✅ Через прокси | Средне | https://openrouter.ai/keys |
+| Groq | ✅ Да | ❌ Ограничен | Очень быстро | https://console.groq.com |
+| SiliconFlow | ✅ Да | ✅ Китай/Азия | Быстро | https://cloud.siliconflow.cn/ |
 
 **Диагностика LLM ошибок:**
 ```bash
@@ -499,7 +569,7 @@ docker-compose exec shortsflow env | grep LLM
 **Частые причины 403 Forbidden:**
 - Неверный API ключ (скопировали с пробелами или не полностью)
 - Ключ от другого провайдера (Groq ключ для Gemini не подойдёт)
-- Модель недоступна в вашем регионе
+- Модель недоступна в вашем регионе (решение — смените провайдера)
 - Превышен бесплатный лимит (для Groq — 30 запросов/минуту)
 
 ## Лицензия
